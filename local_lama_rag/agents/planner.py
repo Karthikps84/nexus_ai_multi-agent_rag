@@ -7,6 +7,12 @@ from graph.state import ExecutionPlan, ExecutionStep
 from prompts.prompt_library import PLANNER_PROMPT
 
 
+_SECOND_TASK_RE = re.compile(
+    r" and (?:then |also )?(?:compare|summari[sz]e|explain|list|extract|write|show|give|tell|describe|"
+    r"what|how|why|who|when|where|which|create|generate|find|calculate|translate)\b"
+)
+
+
 class PlannerAgent(BaseAgent):
     _LINE_RE = re.compile(
         r"^\s*([a-zA-Z0-9_\-]+)\s*\|\s*([a-z_]+)\s*\|\s*([^|]+)\|\s*(.+)$"
@@ -20,9 +26,14 @@ class PlannerAgent(BaseAgent):
     def is_compound(self, question: str) -> bool:
         """Cheap heuristic gate before paying for an LLM planning call --
         only bother decomposing if the question plausibly has multiple asks."""
+        if len(question) <= 40:
+            return False
         q = question.lower()
-        joiners = (" and ", " then ", " also ", "; ")
-        return any(j in q for j in joiners) and len(question) > 40
+        if any(j in q for j in (" then ", " also ", "; ")) or q.count("?") > 1:
+            return True
+        # A bare " and " usually joins two nouns ("pull requests and the changelog"),
+        # so only treat it as compound when a second task follows it.
+        return bool(_SECOND_TASK_RE.search(q))
 
     def _fallback_plan(self, question: str, route_hint: str) -> ExecutionPlan:
         steps: list[ExecutionStep] = []

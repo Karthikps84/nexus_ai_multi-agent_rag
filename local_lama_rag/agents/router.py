@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from langchain_core.output_parsers import StrOutputParser
@@ -21,8 +22,16 @@ _KEYWORDS = {
     "vision_analysis": ("detect object", "object detection", "run detection", "how many objects",
                         "count the objects", "count objects", "bounding box", "bounding boxes",
                         "detect and count", "segment the image", "run yolo"),
-    "image": ("figure", "chart", "diagram", "image", "graph shows", "picture", "screenshot"),
 }
+
+# "image" needs context: a bare substring match sent "Docker images" to the image agent.
+_IMAGE_RE = re.compile(
+    r"\b(?:this|the|that|attached|uploaded|given)\s+image\b(?!s)"
+    r"|\bimage\s+(?:shows?|of|in|file)\b"
+    r"|\b(?:figure|chart|diagram|picture|screenshot)s?\b"
+    r"|graph shows",
+    re.I,
+)
 
 
 class RouterAgent(BaseAgent):
@@ -51,6 +60,8 @@ class RouterAgent(BaseAgent):
         for route, kws in _KEYWORDS.items():
             if any(kw in q for kw in kws):
                 return route
+        if _IMAGE_RE.search(q):
+            return "image"
         return None
 
     def classify(self, question: str, use_llm_fallback: bool = True) -> dict:

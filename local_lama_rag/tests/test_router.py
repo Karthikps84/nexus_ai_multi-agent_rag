@@ -1,3 +1,5 @@
+import pytest
+
 from agents.router import RouterAgent
 
 
@@ -49,3 +51,16 @@ def test_match_files_in_question(fake_llm):
     router = _router(fake_llm, files=["animals.pdf", "tech.pdf"])
     assert router.match_files_in_question("Tell me about animals.pdf") == ["animals.pdf"]
     assert router.match_files_in_question("Tell me something unrelated") == []
+
+
+def test_docker_images_question_is_not_routed_to_image(fake_llm):
+    router = _router(fake_llm, files=[])
+    assert router.classify_keywords("Where are the Docker images published?") is None
+
+
+@pytest.mark.parametrize(
+    "q",
+    ["Describe the image on page 2", "What does this chart show?", "Explain the diagram in the paper", "look at the attached image"],
+)
+def test_real_image_questions_still_route_to_image(fake_llm, q):
+    assert _router(fake_llm, files=[]).classify_keywords(q) == "image"
