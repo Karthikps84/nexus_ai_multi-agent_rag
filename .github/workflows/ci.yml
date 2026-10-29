@@ -91,7 +91,7 @@ jobs:
             Chore
             revert
             Revert
-          headerPattern: '^(\w*)(?:\(([\w$.\-*/ ]*)\))?[:/]\s(.*)$'
+          headerPattern: '^(\w*)(?:\(([\w$.\-*/ ]*)\))?[:/]\s*(.*)$'
           headerPatternCorrespondence: type, scope, subject
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
