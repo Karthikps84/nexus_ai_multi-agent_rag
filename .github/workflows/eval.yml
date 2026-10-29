@@ -1,0 +1,72 @@
+name: Eval
+
+# Answer-quality gate. Runs the real pipeline against a small public reference
+# corpus (local_lama_rag/eval/ci_docs) and fails if too few answers are right,
+# so a prompt, model or retrieval change can't silently make Nexus worse.
+# Needs a repo secret named NVIDIA_API_KEY (Settings -> Secrets and variables ->
+# Actions). Without it the job skips with a warning instead of failing.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "local_lama_rag/prompts/**"
+      - "local_lama_rag/agents/**"
+      - "local_lama_rag/retriever/**"
+      - "local_lama_rag/graph/**"
+      - "local_lama_rag/config.py"
+      - "local_lama_rag/eval/ci_*"
+      - ".github/workflows/eval.yml"
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Answer quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+    defaults:
+      run:
+        working-directory: local_lama_rag
+    steps:
+      - name: Check for API key
+        id: key
+        working-directory: .
+        run: |
+          if [ -z "$NVIDIA_API_KEY" ]; then
+            echo "::warning::NVIDIA_API_KEY secret is not set (or unavailable to this PR); skipping eval."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.skip != 'true'
+
+      - name: Install uv
+        if: steps.key.outputs.skip != 'true'
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        if: steps.key.outputs.skip != 'true'
+        run: uv sync
+
+      - name: Run eval
+        if: steps.key.outputs.skip != 'true'
+        run: uv run python eval/ci_eval.py --min-score 0.8
+
+      - name: Upload results
+        if: always() && steps.key.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: local_lama_rag/ci_eval_results.json
