@@ -258,7 +258,7 @@ def ask_stream(request: AskRequest, user: User = Depends(current_user)):
                     memory=memory,
                 )
                 yield _sse("done", AskResponse(**_finish(result)).model_dump())
-        except Exception as exc:
+        except Exception:
             logger.exception("ask/stream failed")
             yield _sse("error", {"detail": "Request failed"})
 
