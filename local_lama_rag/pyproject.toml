@@ -1,6 +1,6 @@
 [project]
 name = "local-lama-rag"
-version = "0.1.1"
+version = "2.0.0"
 description = "Multi-agent RAG system (LangGraph + NVIDIA NIM), with Streamlit UI and FastAPI service."
 requires-python = ">=3.12"
 dependencies = [
