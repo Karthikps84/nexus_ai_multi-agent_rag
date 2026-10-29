@@ -1,0 +1,12 @@
+.git
+.env
+__pycache__/
+*.pyc
+.DS_Store
+.streamlit/secrets.toml
+eval/
+frontend/
+.venv/
+.pytest_cache/
+.ruff_cache/
+tests/

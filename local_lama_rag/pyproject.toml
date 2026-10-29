@@ -1,0 +1,62 @@
+[project]
+name = "local-lama-rag"
+version = "0.1.1"
+description = "Multi-agent RAG system (LangGraph + NVIDIA NIM), with Streamlit UI and FastAPI service."
+requires-python = ">=3.12"
+dependencies = [
+    "langchain==1.3.13",
+    "langchain-community==0.4.2",
+    "langchain-core==1.4.9",
+    "langchain-chroma==1.1.0",
+    "langchain-nvidia-ai-endpoints==1.4.3",
+    "langchain-openai==1.3.5",
+    "langchain-text-splitters==1.1.2",
+    "langgraph==1.2.9",
+    "chromadb==1.5.9",
+    "streamlit==1.60.0",
+    "fastapi==0.121.0",
+    "uvicorn[standard]==0.38.0",
+    "python-multipart==0.0.20",
+    "pypdf==6.14.2",
+    "pymupdf4llm==1.28.0",
+    "pymupdf==1.28.0",
+    "docx2txt==0.9",
+    "unstructured==0.24.1",
+    "openpyxl==3.1.5",
+    "python-pptx==1.0.2",
+    "pandas==2.3.3",
+    "flashrank==0.2.10",
+    "rank-bm25==0.2.2",
+    "cachetools==7.1.6",
+    "ultralytics>=8.4.0",
+    "pillow==12.3.0",
+    "tiktoken==0.13.0",
+    "python-dotenv==1.2.2",
+    "requests==2.34.2",
+    "ragas==0.4.3",
+    "datasets==5.0.1",
+    "deepeval==2.9.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.4.1",
+    "pytest-mock==3.16.0",
+    "httpx==0.28.1",
+    "ruff==0.14.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint.per-file-ignores]
+# imports deliberately placed after a library patch / sys.path setup
+"graph/workflow.py" = ["E402"]
+"loaders/document_loader.py" = ["E402"]
+"config.py" = ["E402"]
+
+[tool.pyrefly]
+python-interpreter-path = "/Users/test/Desktop/local_olama_rag/rag/bin/python"

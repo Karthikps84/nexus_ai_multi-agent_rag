@@ -1,0 +1,36 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+# Added by code-review-graph
+.code-review-graph/
+
+*.pt
+
+# test / lint caches
+.pytest_cache/
+.ruff_cache/
+.deepeval/
+.pycache/
+
+# local AI-assistant tooling configs (not part of the app)
+.claude/
+.codebuddy/
+.gemini/
+.kiro/
+.qoder/
+.agents/
+.vscode/
+.cursorrules
+.mcp.json
+Archive.zip
+
+# user documents, generated index and eval data: never commit these
+data/*
+!data/sample.md
+storage/
+eval/eval_set.json
+
+# assistant instruction file (local only)
+CLAUDE.md

@@ -1,0 +1,15 @@
+{
+  "mcp": {
+    "code-review-graph": {
+      "type": "local",
+      "command": [
+        "/Users/test/Desktop/local_olama_rag/rag/bin/python3.12",
+        "-m",
+        "code_review_graph",
+        "serve",
+        "--repo",
+        "/Users/test/Desktop/local_olama_rag/local_lama_rag"
+      ]
+    }
+  }
+}
