@@ -260,7 +260,7 @@ def ask_stream(request: AskRequest, user: User = Depends(current_user)):
                 yield _sse("done", AskResponse(**_finish(result)).model_dump())
         except Exception as exc:
             logger.exception("ask/stream failed")
-            yield _sse("error", {"detail": str(exc)})
+            yield _sse("error", {"detail": "Request failed"})
 
     return StreamingResponse(
         events(),
