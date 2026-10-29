@@ -114,6 +114,17 @@ class CacheManager:
         )
         self._embed_fn: Optional[Callable[[str], list[float]]] = None
 
+    def invalidate_documents(self) -> None:
+        """Drop cached answers/retrievals; call when the document set changes."""
+        self.response_cache.clear()
+        self.retrieval_cache.clear()
+        self._response_idx = _SemanticIndex(
+            self._config.semantic_similarity_threshold, self._config.semantic_max_scan
+        )
+        self._retrieval_idx = _SemanticIndex(
+            self._config.semantic_similarity_threshold, self._config.semantic_max_scan
+        )
+
     def bind_embedder(self, embed_fn: Callable[[str], list[float]]) -> None:
         """
         Call once at startup with a (text → vector) function. After binding,

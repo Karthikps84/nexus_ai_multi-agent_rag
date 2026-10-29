@@ -4,6 +4,20 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
+class AuthRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    username: str
+
+
+class MeResponse(BaseModel):
+    username: str
+
+
 class SessionCreateResponse(BaseModel):
     session_id: str
 
@@ -58,3 +72,8 @@ class UploadResponse(BaseModel):
     saved: list[str]
     skipped: list[str]
     files_indexed: int
+
+
+class DeleteResponse(BaseModel):
+    deleted: str
+    files: list[str]

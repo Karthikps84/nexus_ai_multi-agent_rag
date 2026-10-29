@@ -1,7 +1,14 @@
+import os
 from pathlib import Path
 
 DATA_DIR = Path("data")
 STORAGE_DIR = Path("storage")
+
+# Per-user libraries live under USERS_ROOT/<user_id>/{data,storage}; the user
+# database and signing secret live there too. Never commit this folder.
+USERS_ROOT = Path(os.getenv("USERS_ROOT", "users"))
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "50"))
+MAX_ACTIVE_USER_SYSTEMS = int(os.getenv("MAX_ACTIVE_USER_SYSTEMS", "6"))
 
 # pyrefly: ignore[missing-import]
 from dotenv import load_dotenv
@@ -68,7 +75,10 @@ EMBED_WORKERS = 5
 
 SIMILARITY_TOP_K = 10
 FINAL_TOP_K = 6
-SIMILARITY_THRESHOLD = 0.30
+# Measured on the CI reference corpus: questions answered by the docs score
+# 0.185-0.529, unrelated questions 0.023-0.055. 0.30 sat inside the in-doc
+# range and wrongly sent answerable questions to web search.
+SIMILARITY_THRESHOLD = 0.12
 USE_MMR = True
 ENABLE_HYBRID_SEARCH = True
 ENABLE_RERANK = True

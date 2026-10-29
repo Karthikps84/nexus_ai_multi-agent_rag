@@ -158,6 +158,21 @@ class MultiAgentSystem:
     def initialize(self, on_progress=None):
         chunks = self.vs_manager.initialize(on_progress=on_progress)
         self.retrieval.index_chunks(chunks)
+        self._documents_changed()
+
+    def _documents_changed(self):
+        self.docs_version = getattr(self, "docs_version", 0) + 1
+        self.cache_manager.invalidate_documents()
+
+    def _response_key(self, question, forced_route, target_files):
+        base = self.cache_manager.response_key(question, forced_route, target_files)
+        return f"{base}|v{getattr(self, 'docs_version', 0)}"
+
+    def remove_document(self, filename: str):
+        """Remove one document from the index and rebuild the keyword index."""
+        self.vs_manager.remove_file(filename)
+        self.retrieval.index_chunks(self.vs_manager.all_chunks())
+        self._documents_changed()
 
     @staticmethod
     def _format_history(history: list) -> str:
@@ -377,7 +392,7 @@ class MultiAgentSystem:
 
     def prepare_stream(self, question: str, target_files: list = None, forced_route: str = None, memory: MemoryAgent = None) -> dict:
         mem = memory or self.memory
-        cache_key = self.cache_manager.response_key(question, forced_route, target_files)
+        cache_key = self._response_key(question, forced_route, target_files)
         cached = self.cache_manager.get_response(cache_key) or mem.cache_get(cache_key)
         if cached:
             return {"streamable": False, "cached": True, "result": cached}
@@ -460,6 +475,7 @@ class MultiAgentSystem:
                 "streamable": True,
                 "route": "local",
                 "sources": sources,
+                "docs": artifacts.docs,
                 "context": context,
                 "chain": self.qa.chain,
                 "inputs": {"context": context, "question": resolved_question, "history": history_str},
@@ -515,7 +531,7 @@ class MultiAgentSystem:
             "confidence": (verification or {}).get("confidence"),
         }
         mem.add_turn(question, answer)
-        cache_key = self.cache_manager.response_key(question, forced_route, target_files)
+        cache_key = self._response_key(question, forced_route, target_files)
         mem.cache_set(cache_key, result)
         self.cache_manager.set_response(cache_key, result)
         return result
@@ -615,7 +631,7 @@ class MultiAgentSystem:
 
     def ask(self, question: str, target_files: list = None, forced_route: str = None, memory: MemoryAgent = None) -> dict:
         mem = memory or self.memory
-        cache_key = self.cache_manager.response_key(question, forced_route, target_files)
+        cache_key = self._response_key(question, forced_route, target_files)
         cached = self.cache_manager.get_response(cache_key) or mem.cache_get(cache_key)
         if cached:
             logger.info("Response cache HIT.")
