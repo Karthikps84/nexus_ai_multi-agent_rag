@@ -1,0 +1,22 @@
+[
+  {"question": "What are the four nodes of the LangGraph pipeline?",
+   "must_contain": [["analyze"], ["plan"], ["execute"], ["finalize"]], "expect_source": "architecture.md"},
+  {"question": "Which agent checks answers against the retrieved sources?",
+   "must_contain": [["verifier"]], "expect_source": "architecture.md"},
+  {"question": "What chunk size and overlap are used when splitting documents?",
+   "must_contain": [["900"], ["150"]], "expect_source": "retrieval.md"},
+  {"question": "Which keyword search algorithm is combined with dense vector search?",
+   "must_contain": [["bm25"]], "expect_source": "retrieval.md"},
+  {"question": "What similarity threshold does the reference configuration use?",
+   "must_contain": [["0.30", "0.3"]], "expect_source": "retrieval.md"},
+  {"question": "Which re-ranker orders the final passages?",
+   "must_contain": [["flashrank"]], "expect_source": "retrieval.md"},
+  {"question": "How does the API stream answers to the browser?",
+   "must_contain": [["server-sent events", "sse"]], "expect_source": "operations.md"},
+  {"question": "Which hashing is used for account passwords?",
+   "must_contain": [["scrypt"]], "expect_source": "operations.md"},
+  {"question": "Which tool creates release pull requests and the changelog?",
+   "must_contain": [["release-please"]], "expect_source": "operations.md"},
+  {"question": "Where are the Docker images published?",
+   "must_contain": [["ghcr", "github container registry"]], "expect_source": "operations.md"}
+]

@@ -58,10 +58,13 @@ class VectorStoreManager:
         except Exception:
             return None
 
-    def _save_hash(self):
+    def _save_hash(self, files: Optional[dict] = None):
         with open(self._hash_file(), "w") as f:
             json.dump(
-                {"dataset_hash": compute_dataset_hash(self.data_dir), "files": self._current_manifest()},
+                {
+                    "dataset_hash": compute_dataset_hash(self.data_dir),
+                    "files": self._current_manifest() if files is None else files,
+                },
                 f, indent=4,
             )
 
@@ -204,8 +207,8 @@ class VectorStoreManager:
 
     def initialize(self, on_progress: ProgressFn = None):
         """Returns the full chunk list either way, so the caller can build BM25 from it."""
-        self.storage_dir.mkdir(exist_ok=True)
-        self._validate_data_folder()
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
         has_existing = self.storage_dir.exists() and any(self.storage_dir.iterdir())
 
         if has_existing and not self._dataset_changed():
@@ -216,6 +219,19 @@ class VectorStoreManager:
             if on_progress:
                 on_progress(100, "Index ready")
             return chunks
+
+        if not has_existing and not self._current_manifest():
+            # Empty library (e.g. a brand-new user): start with an empty index.
+            logger.info("No documents yet. Creating an empty index.")
+            self.vectorstore = Chroma(
+                embedding_function=self.embeddings,
+                persist_directory=str(self.storage_dir),
+                collection_metadata={"hnsw:space": "cosine"},
+            )
+            self._save_hash({})
+            if on_progress:
+                on_progress(100, "Index ready")
+            return []
 
         if has_existing:
             try:
@@ -260,15 +276,18 @@ class VectorStoreManager:
         raw = self.vectorstore.get(include=["documents", "metadatas"])
         return [LCDoc(page_content=t, metadata=m) for t, m in zip(raw["documents"], raw["metadatas"])]
 
-    def _validate_data_folder(self):
-        if not self.data_dir.exists():
-            raise FileNotFoundError(f"Data folder not found: {self.data_dir}.")
-        files = [p for p in self.data_dir.iterdir() if p.is_file()]
-        if not files:
-            raise FileNotFoundError(f"No files found in {self.data_dir}.")
-        supported = [p for p in files if p.suffix.lower() in config.SUPPORTED_EXTENSIONS]
-        if not supported:
-            raise FileNotFoundError(f"No supported documents in {self.data_dir}.")
+    def all_chunks(self) -> list:
+        raw = self.vectorstore.get(include=["documents", "metadatas"])
+        return [LCDoc(page_content=t, metadata=m) for t, m in zip(raw["documents"], raw["metadatas"])]
+
+    def remove_file(self, filename: str) -> None:
+        """Delete one file's chunks from the index and from the manifest."""
+        if self.vectorstore is None:
+            self.load_existing()
+        self.vectorstore._collection.delete(where={"source_file": filename})
+        manifest = self._load_manifest() or {}
+        manifest.pop(filename, None)
+        self._save_hash(manifest)
 
     def fetch_file_chunks(self, filename: str, max_chunks: int) -> list:
         try:

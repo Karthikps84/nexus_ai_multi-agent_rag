@@ -39,13 +39,15 @@ Most "chat with your PDF" demos are one prompt stuffed with a few chunks. Nexus 
 
 ## 🚀 Features
 
+- 🔐 **Private accounts**: sign up and get your own document library and index, isolated from every other user
+- ⚡ **Streaming answers**: words appear as they are generated, with a Markdown view and citation chips
 - 📚 **Chat with PDFs, Word, Excel, PowerPoint, CSV, Markdown, text and images**
 - 🔎 **Hybrid retrieval** (Chroma + BM25 + re-rank + MMR) with inline `[file p.X]` citations
 - ⚡ **Incremental indexing**: add a file and only that file is embedded. Remove or edit one and only its chunks change
-- 🗂️ **Indexed-docs panel**: see what's indexed, watch new uploads appear, click a file to scope your question to it
+- 🗂️ **Indexed-docs panel**: see what's indexed, watch new uploads appear, delete a document, or click one to scope your question to it
 - 🖼️ **Vision tools**: attach an image to detect objects (YOLO with drawn boxes) or ask / classify it with a vision-language model
 - 🎨 **Polished chat UI**: Markdown answers, tables and code blocks, citation chips, typing indicator, dark mode
-- 🧪 **Quality built in**: RAGAS / DeepEval evaluation scripts, response and retrieval caching, optional LangSmith tracing
+- 🧪 **Quality built in**: a CI answer-quality gate on a reference corpus, RAGAS / DeepEval scripts, response and retrieval caching, optional LangSmith tracing
 - 🔁 **Real CI/CD**: lint + tests on every PR, automatic semantic versioning, changelog, and versioned Docker images on GHCR
 
 ## 🏗️ How it works
@@ -90,7 +92,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:3000** and try *"What is Nexus AI?"*: a tiny sample doc ships in `data/` so the first run works.
+Open **http://localhost:3000**, create an account, and try *"What is Nexus AI?"*: a tiny sample doc ships in `data/` so the first run works.
 Then drop in your own documents with the **+** button. Only new or changed files are embedded, and your documents and index stay local (`data/` and `storage/` are git-ignored).
 
 <details>
@@ -108,6 +110,22 @@ docker pull ghcr.io/karthikps84/nexus_ai_multi-agent_rag-api:latest
 docker pull ghcr.io/karthikps84/nexus_ai_multi-agent_rag-web:latest
 ```
 </details>
+
+## 🔌 API
+
+Interactive docs are served at `http://localhost:8000/docs`. Everything except `/health` and `/auth/*` needs an `Authorization: Bearer <token>` header from `/auth/login`.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /auth/register`, `POST /auth/login`, `GET /auth/me` | Accounts and tokens |
+| `POST /ask/stream` | Server-sent events: `meta`, many `token`, then `done` with the full answer |
+| `POST /ask` | The same answer in one response |
+| `GET /files`, `POST /upload`, `DELETE /files/{name}` | Your documents (indexing is incremental) |
+| `POST /ask/image`, `POST /ask/vision-analysis` | Ask about an image / detect objects in it |
+
+## ☁️ Deploy
+
+`docker compose up --build` runs everything locally. For a free hosted demo (Hugging Face Space + Vercel) see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## ⚙️ Configuration
 
@@ -130,6 +148,7 @@ Free NIM endpoints vary a lot in speed. The defaults were picked from live laten
 cd local_lama_rag
 uv run ruff check .      # lint
 uv run pytest -q         # tests (no API keys needed)
+uv run python eval/ci_eval.py   # answer-quality check (needs NVIDIA_API_KEY)
 cd frontend && npm run lint && npm run build
 ```
 
@@ -138,10 +157,12 @@ CI checks it, and [release-please](https://github.com/googleapis/release-please)
 
 ## 🗺️ Roadmap
 
-- [ ] Streaming answers in the chat UI
-- [ ] Delete documents from the UI
-- [ ] Multi-user sessions with per-user indexes
-- [ ] One-click deploy
+- [x] Streaming answers in the chat UI
+- [x] Delete documents from the UI
+- [x] Accounts with per-user indexes
+- [ ] Persistent chat history across refreshes
+- [ ] Export answers and tables
+- [ ] Playwright end-to-end tests
 
 ## 📄 License
 

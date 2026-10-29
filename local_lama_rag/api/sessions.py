@@ -4,25 +4,27 @@ from agents.memory import MemoryAgent
 
 
 class SessionStore:
-    """In-process session_id -> MemoryAgent map, so concurrent API callers
-    get isolated conversation history instead of sharing one MemoryAgent."""
+    """In-process (owner, session_id) -> MemoryAgent map. A session id from
+    one account is never usable by another."""
 
     def __init__(self):
-        self._sessions: dict[str, MemoryAgent] = {}
+        self._sessions: dict[tuple[str, str], MemoryAgent] = {}
 
-    def create(self) -> str:
+    def create(self, owner: str) -> str:
         session_id = str(uuid.uuid4())
-        self._sessions[session_id] = MemoryAgent()
+        self._sessions[(owner, session_id)] = MemoryAgent()
         return session_id
 
-    def get(self, session_id: str) -> MemoryAgent:
-        if session_id not in self._sessions:
-            self._sessions[session_id] = MemoryAgent()
-        return self._sessions[session_id]
+    def get(self, session_id: str, owner: str) -> MemoryAgent:
+        key = (owner, session_id)
+        if key not in self._sessions:
+            self._sessions[key] = MemoryAgent()
+        return self._sessions[key]
 
-    def clear(self, session_id: str) -> bool:
-        if session_id in self._sessions:
-            self._sessions[session_id].clear()
+    def clear(self, session_id: str, owner: str) -> bool:
+        key = (owner, session_id)
+        if key in self._sessions:
+            self._sessions[key].clear()
             return True
         return False
 

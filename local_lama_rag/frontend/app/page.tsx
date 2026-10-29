@@ -4,12 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import AuthScreen from "./auth-screen";
 import {
   analyzeImage,
-  ask,
   askImage,
+  askStream,
+  AuthExpiredError,
   checkHealth,
+  clearToken,
   createSession,
+  deleteFile,
+  fetchMe,
+  getToken,
   listFiles,
   uploadFiles,
   type AskResponse,
@@ -28,14 +34,17 @@ interface Message {
   docs?: RetrievedDoc[];
   image?: string;
   annotated?: string | null;
+  streaming?: boolean;
 }
 
 const SESSION_KEY = "local_lama_rag_session_id";
 
 function linkifyCitations(text: string): string {
-  return text.replace(/\[([^\[\]]+?\.(?:pdf|docx|xlsx|xls|csv|pptx|txt|md)(?:\s+p\.\d+)?)\]/gi, (_m, label: string) => {
-    const short = label.length > 28 ? label.slice(0, 25) + "… " + (label.match(/p\.\d+/)?.[0] ?? "") : label;
-    return `[${short}](cite:${encodeURIComponent(label)})`;
+  return text.replace(/\[([^\[\]]+?\.(?:pdf|docx|xlsx|xls|csv|pptx|txt|md)(?:\s+p\.[\w-]+)?)\]/gi, (_m, label: string) => {
+    const clean = label.replace(/\s+p\.-$/, "");
+    const page = clean.match(/p\.\d+$/)?.[0] ?? "";
+    const short = clean.length > 28 ? clean.slice(0, 25) + "… " + page : clean;
+    return `[${short}](cite:${encodeURIComponent(clean)})`;
   });
 }
 
@@ -51,6 +60,8 @@ function DocsPanel({
   fresh,
   scope,
   onToggle,
+  onDelete,
+  deleting,
   onRefresh,
   onClose,
 }: {
@@ -59,6 +70,8 @@ function DocsPanel({
   fresh: Set<string>;
   scope: string[];
   onToggle: (name: string) => void;
+  onDelete: (name: string) => void;
+  deleting: string | null;
   onRefresh: () => void;
   onClose: () => void;
 }) {
@@ -102,33 +115,46 @@ function DocsPanel({
           {files.map((f) => {
             const active = scope.includes(f.name);
             return (
-              <motion.button
+              <motion.div
                 key={f.name}
                 layout
                 initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                onClick={() => onToggle(f.name)}
-                className={`mb-1.5 flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
+                animate={{ opacity: deleting === f.name ? 0.4 : 1, x: 0 }}
+                className={`group mb-1.5 flex items-center rounded-xl border transition-colors ${
                   active
                     ? "border-indigo-500 bg-indigo-500/10"
                     : "border-transparent hover:border-[var(--surface-border)] hover:bg-indigo-500/5"
                 }`}
               >
-                <span className="gradient-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[9px] font-bold uppercase text-white">
-                  {f.kind.slice(0, 4)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-medium text-[var(--foreground)]" title={f.name}>
-                    {f.name}
+                <button
+                  onClick={() => onToggle(f.name)}
+                  className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left"
+                >
+                  <span className="gradient-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[9px] font-bold uppercase text-white">
+                    {f.kind.slice(0, 4)}
                   </span>
-                  <span className="block text-[10px] text-zinc-400">{formatSize(f.size_bytes)}</span>
-                </span>
-                {fresh.has(f.name) && (
-                  <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-500">
-                    new
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium text-[var(--foreground)]" title={f.name}>
+                      {f.name}
+                    </span>
+                    <span className="block text-[10px] text-zinc-400">{formatSize(f.size_bytes)}</span>
                   </span>
-                )}
-              </motion.button>
+                  {fresh.has(f.name) && (
+                    <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-500">
+                      new
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => onDelete(f.name)}
+                  disabled={deleting !== null}
+                  title="Delete from index"
+                  aria-label={`Delete ${f.name}`}
+                  className="mr-2 rounded-lg p-1.5 text-xs text-zinc-400 transition hover:bg-red-500/10 hover:text-red-500 focus:opacity-100 disabled:opacity-30 sm:opacity-0 sm:group-hover:opacity-100"
+                >
+                  ✕
+                </button>
+              </motion.div>
             );
           })}
         </AnimatePresence>
@@ -206,7 +232,7 @@ function TypingIndicator() {
   );
 }
 
-export default function Home() {
+function ChatApp({ username, onLogout }: { username: string; onLogout: () => void }) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -230,6 +256,15 @@ export default function Home() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageMode, setImageMode] = useState<"ask" | "detect">("detect");
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  function reportError(err: unknown, fallback: string) {
+    if (err instanceof AuthExpiredError) {
+      onLogout();
+      return;
+    }
+    setError(err instanceof Error ? err.message : fallback);
+  }
 
   async function refreshFiles(): Promise<FileInfo[]> {
     setFilesLoading(true);
@@ -237,10 +272,27 @@ export default function Home() {
       const list = await listFiles();
       setFiles(list);
       return list;
-    } catch {
+    } catch (err) {
+      if (err instanceof AuthExpiredError) onLogout();
       return [];
     } finally {
       setFilesLoading(false);
+    }
+  }
+
+  async function handleDelete(name: string) {
+    if (!window.confirm(`Delete "${name}"? It is removed from the index and from disk.`)) return;
+    setDeleting(name);
+    setError(null);
+    try {
+      const remaining = await deleteFile(name);
+      setFiles((prev) => prev.filter((f) => remaining.includes(f.name)));
+      setScope((prev) => prev.filter((n) => n !== name));
+      setNotice(`Deleted ${name}`);
+    } catch (err) {
+      reportError(err, "Delete failed.");
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -267,6 +319,7 @@ export default function Home() {
     checkHealth().then(setApiOnline);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount
     refreshFiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -284,12 +337,15 @@ export default function Home() {
         sessionStorage.setItem(SESSION_KEY, id);
         setSessionId(id);
       })
-      .catch(() => {
-        if (!cancelled) setError("Could not reach the API. Is uvicorn running on port 8000?");
+      .catch((err) => {
+        if (cancelled) return;
+        if (err instanceof AuthExpiredError) onLogout();
+        else setError("Could not reach the API. Is uvicorn running on port 8000?");
       });
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -316,27 +372,52 @@ export default function Home() {
     setIsSending(true);
     setError(null);
 
+    const toMessage = (id: string, r: AskResponse): Message => ({
+      id,
+      role: "assistant",
+      text: r.answer,
+      sources: r.sources,
+      confidence: r.confidence,
+      route: r.route,
+      latency: r.execution_time,
+      docs: r.docs,
+      annotated: r.annotated_image,
+      streaming: false,
+    });
+
     try {
-      let result: AskResponse;
-      if (file && mode === "detect") result = await analyzeImage(sessionId, file);
-      else if (file) result = await askImage(sessionId, question, file);
-      else result = await ask(sessionId, question, scope);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          text: result.answer,
-          sources: result.sources,
-          confidence: result.confidence,
-          route: result.route,
-          latency: result.execution_time,
-          docs: result.docs,
-          annotated: result.annotated_image,
-        },
-      ]);
+      if (file) {
+        const result = mode === "detect" ? await analyzeImage(sessionId, file) : await askImage(sessionId, question, file);
+        setMessages((prev) => [...prev, toMessage(crypto.randomUUID(), result)]);
+      } else {
+        const msgId = crypto.randomUUID();
+        let started = false;
+        const ensure = () => {
+          if (started) return;
+          started = true;
+          setMessages((prev) => [...prev, { id: msgId, role: "assistant", text: "", streaming: true }]);
+        };
+        await askStream(sessionId, question, scope, {
+          onMeta: (meta) => {
+            ensure();
+            setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, route: meta.route } : m)));
+          },
+          onToken: (t) => {
+            ensure();
+            setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, text: m.text + t } : m)));
+          },
+          onDone: (result) => {
+            setMessages((prev) =>
+              started
+                ? prev.map((m) => (m.id === msgId ? toMessage(msgId, result) : m))
+                : [...prev, toMessage(msgId, result)],
+            );
+          },
+        });
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed.");
+      setMessages((prev) => prev.filter((m) => !(m.streaming && !m.text)));
+      reportError(err, "Request failed.");
     } finally {
       setIsSending(false);
     }
@@ -363,7 +444,7 @@ export default function Home() {
       if (result.skipped.length) parts.push(`skipped (unsupported): ${result.skipped.join(", ")}`);
       setNotice(parts.join(" — ") || "No files uploaded.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      reportError(err, "Upload failed.");
     } finally {
       setIsUploading(false);
     }
@@ -436,6 +517,8 @@ export default function Home() {
                       fresh={fresh}
                       scope={scope}
                       onToggle={toggleScope}
+                      onDelete={handleDelete}
+                      deleting={deleting}
                       onRefresh={refreshFiles}
                       onClose={() => setSidebarOpen(false)}
                     />
@@ -452,6 +535,13 @@ export default function Home() {
             transition={{ duration: 1.6, repeat: Infinity }}
           />
           {apiOnline === null ? "checking…" : apiOnline ? "online" : "offline"}
+          <span className="hidden text-xs text-zinc-400 sm:inline">· {username}</span>
+          <button
+            onClick={onLogout}
+            className="rounded-xl border border-[var(--surface-border)] px-2.5 py-1.5 text-xs hover:border-red-400 hover:text-red-500"
+          >
+            Sign out
+          </button>
         </div>
       </header>
 
@@ -533,7 +623,7 @@ export default function Home() {
                             ),
                         }}
                       >
-                        {linkifyCitations(m.text)}
+                        {linkifyCitations(m.text + (m.streaming ? " ▍" : ""))}
                       </ReactMarkdown>
                     </div>
                   ) : (
@@ -571,7 +661,7 @@ export default function Home() {
               </motion.div>
             ))}
           </AnimatePresence>
-          {isSending && (
+          {isSending && !messages[messages.length - 1]?.streaming && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -696,4 +786,39 @@ export default function Home() {
       </div>
     </div>
   );
+}
+
+export default function Home() {
+  const [auth, setAuth] = useState<{ status: "loading" } | { status: "out" } | { status: "in"; username: string }>({
+    status: "loading",
+  });
+
+  useEffect(() => {
+    if (!getToken()) {
+      // token lives in localStorage (client-only), so it can only be read after mount
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAuth({ status: "out" });
+      return;
+    }
+    fetchMe()
+      .then((username) => setAuth({ status: "in", username }))
+      .catch(() => {
+        clearToken();
+        setAuth({ status: "out" });
+      });
+  }, []);
+
+  function logout() {
+    clearToken();
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      /* ignore */
+    }
+    setAuth({ status: "out" });
+  }
+
+  if (auth.status === "loading") return <div className="flex flex-1" />;
+  if (auth.status === "out") return <AuthScreen onAuthed={(username) => setAuth({ status: "in", username })} />;
+  return <ChatApp key={auth.username} username={auth.username} onLogout={logout} />;
 }

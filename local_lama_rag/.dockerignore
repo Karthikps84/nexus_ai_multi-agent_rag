@@ -10,3 +10,7 @@ frontend/
 .pytest_cache/
 .ruff_cache/
 tests/
+data/*
+!data/sample.md
+storage/
+users/
