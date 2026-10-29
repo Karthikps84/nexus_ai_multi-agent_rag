@@ -34,3 +34,6 @@ eval/eval_set.json
 
 # assistant instruction file (local only)
 CLAUDE.md
+
+# per-user libraries, accounts database and token secret
+users/
