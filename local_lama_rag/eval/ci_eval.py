@@ -16,11 +16,13 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 ATTEMPTS = 3  # per question, only retried when the call itself errors
+QUESTION_TIMEOUT = 90  # seconds per attempt; a hung free-tier call must not hang CI
 sys.path.insert(0, str(ROOT.parent))
 
 
@@ -34,6 +36,27 @@ def score_answer(item: dict, answer: str, sources: list[str]) -> tuple[bool, lis
     if expected and not any(expected in s for s in sources):
         problems.append(f"did not cite {expected}")
     return not problems, problems
+
+
+def call_with_timeout(fn, timeout: float):
+    """Run fn() in a daemon thread; raise TimeoutError if it takes longer than `timeout`.
+    A stuck thread can't be killed, but being a daemon it never blocks interpreter exit."""
+    box: dict = {}
+
+    def runner():
+        try:
+            box["value"] = fn()
+        except BaseException as exc:  # noqa: BLE001 - re-raised in the caller
+            box["error"] = exc
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        raise TimeoutError(f"no answer within {timeout:.0f}s")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
 
 
 def main() -> int:
@@ -58,7 +81,7 @@ def main() -> int:
             answer, sources, ok, problems = "", [], False, []
             for attempt in range(1, ATTEMPTS + 1):
                 try:
-                    out = system.ask(item["question"])
+                    out = call_with_timeout(lambda: system.ask(item["question"]), QUESTION_TIMEOUT)
                     answer, sources = str(out.get("answer", "")), list(out.get("sources", []))
                     ok, problems = score_answer(item, answer, sources)
                     break
