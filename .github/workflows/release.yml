@@ -22,8 +22,22 @@ jobs:
       released: ${{ steps.rp.outputs.releases_created }}
       tag: ${{ steps.rp.outputs['local_lama_rag--tag_name'] }}
     steps:
+      - id: release-check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          echo "already_released=false" >> "$GITHUB_OUTPUT"
+          if [[ "$HEAD_COMMIT_MESSAGE" =~ chore\(main\):\ release\ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            tag="v${BASH_REMATCH[1]}"
+            if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              echo "already_released=true" >> "$GITHUB_OUTPUT"
+              echo "Release $tag already exists, skipping release-please to avoid duplicate release creation."
+            fi
+          fi
       - uses: googleapis/release-please-action@v4
         id: rp
+        if: steps.release-check.outputs.already_released != 'true'
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
