@@ -25,9 +25,10 @@ jobs:
       - id: release-check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           echo "already_released=false" >> "$GITHUB_OUTPUT"
-          if [[ "${{ github.event.head_commit.message }}" =~ chore\(main\):\ release\ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+          if [[ "$HEAD_COMMIT_MESSAGE" =~ chore\(main\):\ release\ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
             tag="v${BASH_REMATCH[1]}"
             if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
               echo "already_released=true" >> "$GITHUB_OUTPUT"
